@@ -163,6 +163,7 @@ ClassicSVfitIntegrand::setLeptonInputs(const std::vector<MeasuredTauLepton>& mea
   }
   measuredTauLepton1_ = measuredTauLeptons[0];
   leg1isLep_ = measuredTauLepton1_.type() == MeasuredTauLepton::kTauToElecDecay || measuredTauLepton1_.type() == MeasuredTauLepton::kTauToMuDecay;
+  leg1isPrompt_ = measuredTauLepton1_.isPrompt();
   leg1Mass_ = measuredTauLepton1_.mass();
   leg1Mass2_ = square(leg1Mass_);
   Vector eZ1 = normalize(measuredTauLepton1_.p3());
@@ -188,6 +189,7 @@ ClassicSVfitIntegrand::setLeptonInputs(const std::vector<MeasuredTauLepton>& mea
   leg2isLep_ = measuredTauLepton2_.type() == MeasuredTauLepton::kTauToElecDecay || measuredTauLepton2_.type() == MeasuredTauLepton::kTauToMuDecay;
   leg2Mass_ = measuredTauLepton2_.mass();
   leg2Mass2_ = square(leg2Mass_);
+  leg2isPrompt_ = measuredTauLepton2_.isPrompt();
   Vector eZ2 = normalize(measuredTauLepton2_.p3());
   Vector eY2 = normalize(compCrossProduct(eZ2, beamAxis_));
   Vector eX2 = normalize(compCrossProduct(eY2, eZ2));
@@ -257,6 +259,11 @@ void ClassicSVfitIntegrand::computeVisMom(LorentzVector & vis1P4,  LorentzVector
   //std::cout << "vis1: En = " << vis1En << ", Pt = " << TMath::Sqrt(vis1Px*vis1Px + vis1Py*vis1Py) << std::endl;
   vis1P4.SetPxPyPzE(vis1Px, vis1Py, vis1Pz, vis1En);
 
+  if ( measuredTauLepton1_.type() == MeasuredTauLepton::kPrompt ) {
+    nu1P4_.SetPxPyPzE(0., 0., 0., 0.);
+    tau1P4_ = vis1P4_;
+  }
+
   // compute four-vector of visible decay products for second tau
   double vis2Px = visPtShift2*measuredTauLepton2_.px();
   double vis2Py = visPtShift2*measuredTauLepton2_.py();
@@ -264,6 +271,11 @@ void ClassicSVfitIntegrand::computeVisMom(LorentzVector & vis1P4,  LorentzVector
   double vis2En = TMath::Sqrt(square(vis2Px) + square(vis2Py) + square(vis2Pz) + leg2Mass2_);
   //std::cout << "vis2: En = " << vis2En << ", Pt = " << TMath::Sqrt(vis2Px*vis2Px + vis2Py*vis2Py) << std::endl;
   vis2P4.SetPxPyPzE(vis2Px, vis2Py, vis2Pz, vis2En);
+
+  if ( measuredTauLepton2_.type() == MeasuredTauLepton::kPrompt ) {
+    nu2P4_.SetPxPyPzE(0., 0., 0., 0.);
+    tau2P4_ = vis2P4_;
+  }
 }
 
 void ClassicSVfitIntegrand::rescaleX(const double* q) const
@@ -362,97 +374,126 @@ ClassicSVfitIntegrand::EvalPS(const double* q) const
   computeVisMom(vis1P4, vis2P4, visPtShift1, visPtShift2);
 
   // compute visible energy fractions for both taus
-  tmpIndex = legIntegrationParams_[0].idx_X_;
-  assert(tmpIndex != -1);
-  double x1_dash = x_[tmpIndex];
+  double x1_dash = 1.;
+  if ( !leg1isPrompt_ ) {
+  	tmpIndex = legIntegrationParams_[0].idx_X_;
+	assert(tmpIndex != -1);
+  	x1_dash = x_[tmpIndex];
+  }
   double x1 = x1_dash/visPtShift1;
   if ( !(x1 >= 1.e-5 && x1 <= 1.) ) return 0.;
 
-  double x2_dash = 0.0;
-  tmpIndex = legIntegrationParams_[1].idx_X_;
-  if (tmpIndex != -1) {
-    x2_dash = x_[tmpIndex];
+  double x2_dash = 1;
+  if ( !leg2isPrompt_ ) {
+        x2_dash = 0.0;
+  	tmpIndex = legIntegrationParams_[1].idx_X_;
+  	if (tmpIndex != -1) {
+  	  x2_dash = x_[tmpIndex];
+  	}
+  	else {
+  	  x2_dash = (measuredTauLepton1_.p4() + measuredTauLepton2_.p4()).M2()/(diTauMassConstraint_ * diTauMassConstraint_)/x1_dash;
+  	}
   }
-  else {
-    x2_dash = (measuredTauLepton1_.p4() + measuredTauLepton2_.p4()).M2()/(diTauMassConstraint_ * diTauMassConstraint_)/x1_dash;
-  }
+   
   double x2 = x2_dash/visPtShift2;
   if ( !(x2 >= 1.e-5 && x2 <= 1.) ) return 0.;
 
-  // compute neutrino and tau lepton four-vector for first tau
-  double nuEn = vis1P4.E()*(1. - x1)/x1;
 
-  tmpIndex = legIntegrationParams_[0].idx_mNuNu_;
-  double nu1Mass = 0;
-  double nu1P = nuEn;
-  if(tmpIndex != -1){
-    nu1Mass = TMath::Sqrt(x_[tmpIndex]);
-    nu1P = TMath::Sqrt(TMath::Max(0., nuEn*nuEn - x_[tmpIndex]));
+  double nuEn, phiNu, cosThetaNu, cosPhiNu, sinPhiNu, sinThetaNu, thetaNu, nuPx_local, nuPy_local, nuPz_local, nuPx, nuPy, nuPz, nu1Mass, nu2Mass;
+
+  // compute neutrino and tau lepton four-vector for first tau
+  if ( !leg1isPrompt_ ) {
+          nuEn = vis1P4.E()*(1. - x1)/x1;
+  	  tmpIndex = legIntegrationParams_[0].idx_mNuNu_;
+  	  nu1Mass = 0;
+  	  double nu1P = nuEn;
+  	  if(tmpIndex != -1){
+  	    nu1Mass = TMath::Sqrt(x_[tmpIndex]);
+  	    nu1P = TMath::Sqrt(TMath::Max(0., nuEn*nuEn - x_[tmpIndex]));
+  	  }
+  	  tmpIndex = legIntegrationParams_[0].idx_phi_;
+  	  assert(tmpIndex != -1);
+  	  phiNu = x_[tmpIndex];
+  	  cosThetaNu = compCosThetaNuNu(vis1P4.E(), vis1P4.P(), leg1Mass2_, nuEn, nu1P, square(nu1Mass));
+  	  if ( !(cosThetaNu >= -1. && cosThetaNu <= +1.) ) return 0.;
+
+  	  sincos(phiNu, &sinPhiNu, &cosPhiNu);
+  	  thetaNu = TMath::ACos(cosThetaNu);
+  	  sinThetaNu = TMath::Sin(thetaNu);
+
+  	  nuPx_local = nu1P*cosPhiNu*sinThetaNu;
+  	  nuPy_local = nu1P*sinPhiNu*sinThetaNu;
+  	  nuPz_local = nu1P*cosThetaNu;
+  	  nuPx = nuPx_local*leg1eX_x_ + nuPy_local*leg1eY_x_ + nuPz_local*leg1eZ_x_;
+  	  nuPy = nuPx_local*leg1eX_y_ + nuPy_local*leg1eY_y_ + nuPz_local*leg1eZ_y_;
+  	  nuPz = nuPx_local*leg1eX_z_ + nuPy_local*leg1eY_z_ + nuPz_local*leg1eZ_z_;
+  	  //std::cout << "nu1: En = " << nuEn << ", Pt = " << TMath::Sqrt(nu1Px*nu1Px + nu1Py*nu1Py) << std::endl;
+  	  nu1P4_.SetPxPyPzE(nuPx, nuPy, nuPz, nuEn);
+
+	  double tau1En = vis1P4.E() + nuEn;
+	  double tau1Px = vis1P4.px() + nuPx;
+	  double tau1Py = vis1P4.py() + nuPy;
+	  double tau1Pz = vis1P4.pz() + nuPz;
+	  //std::cout << "tau1: En = " << tau1En << ", Pt = " << TMath::Sqrt(tau1Px*tau1Px + tau1Py*tau1Py) << std::endl;
+	  tau1P4_.SetPxPyPzE(tau1Px, tau1Py, tau1Pz, tau1En);
+  }
+  else {
+	  double tau1En = vis1P4.E();
+	  double tau1Px = vis1P4.px();
+	  double tau1Py = vis1P4.py();
+	  double tau1Pz = vis1P4.pz();
+	  //std::cout << "tau1: En = " << tau1En << ", Pt = " << TMath::Sqrt(tau1Px*tau1Px + tau1Py*tau1Py) << std::endl;
+	  tau1P4_.SetPxPyPzE(tau1Px, tau1Py, tau1Pz, tau1En);
+
   }
 
-  tmpIndex = legIntegrationParams_[0].idx_phi_;
-  assert(tmpIndex != -1);
-  double phiNu = x_[tmpIndex];
-  double cosThetaNu = compCosThetaNuNu(vis1P4.E(), vis1P4.P(), leg1Mass2_, nuEn, nu1P, square(nu1Mass));
-  if ( !(cosThetaNu >= -1. && cosThetaNu <= +1.) ) return 0.;
-
-  double cosPhiNu, sinPhiNu, sinThetaNu;
-  sincos(phiNu, &sinPhiNu, &cosPhiNu);
-  double thetaNu = TMath::ACos(cosThetaNu);
-  sinThetaNu = TMath::Sin(thetaNu);
-
-  double nuPx_local = nu1P*cosPhiNu*sinThetaNu;
-  double nuPy_local = nu1P*sinPhiNu*sinThetaNu;
-  double nuPz_local = nu1P*cosThetaNu;
-  double nuPx = nuPx_local*leg1eX_x_ + nuPy_local*leg1eY_x_ + nuPz_local*leg1eZ_x_;
-  double nuPy = nuPx_local*leg1eX_y_ + nuPy_local*leg1eY_y_ + nuPz_local*leg1eZ_y_;
-  double nuPz = nuPx_local*leg1eX_z_ + nuPy_local*leg1eY_z_ + nuPz_local*leg1eZ_z_;
-  //std::cout << "nu1: En = " << nuEn << ", Pt = " << TMath::Sqrt(nu1Px*nu1Px + nu1Py*nu1Py) << std::endl;
-  nu1P4_.SetPxPyPzE(nuPx, nuPy, nuPz, nuEn);
-
-  double tau1En = vis1P4.E() + nuEn;
-  double tau1Px = vis1P4.px() + nuPx;
-  double tau1Py = vis1P4.py() + nuPy;
-  double tau1Pz = vis1P4.pz() + nuPz;
-  //std::cout << "tau1: En = " << tau1En << ", Pt = " << TMath::Sqrt(tau1Px*tau1Px + tau1Py*tau1Py) << std::endl;
-  tau1P4_.SetPxPyPzE(tau1Px, tau1Py, tau1Pz, tau1En);
 
   // compute neutrino and tau lepton four-vector for second tau
-  nuEn = vis2P4.E()*(1. - x2)/x2;
+  if ( !leg2isPrompt_ ) {
+     	  nuEn = vis2P4.E()*(1. - x2)/x2;
+     	  tmpIndex = legIntegrationParams_[1].idx_mNuNu_;
+    	  nu2Mass = 0;
+    	  double nu2P = nuEn;
+    	  if(tmpIndex != -1){
+    	    nu2Mass = TMath::Sqrt(x_[tmpIndex]);
+    	    nu2P = TMath::Sqrt(TMath::Max(0., nuEn*nuEn - x_[tmpIndex]));
+    	  }
+   	  tmpIndex = legIntegrationParams_[1].idx_phi_;
+   	  assert(tmpIndex != -1);
+   	  phiNu = x_[tmpIndex];
+   	  cosThetaNu = compCosThetaNuNu(vis2P4.E(), vis2P4.P(), leg2Mass2_, nuEn, nu2P, square(nu2Mass));
+   	  if ( !(cosThetaNu >= -1. && cosThetaNu <= +1.) ) return 0.;
+   	   
+   	  sincos(phiNu, &sinPhiNu, &cosPhiNu);
+   	  thetaNu = TMath::ACos(cosThetaNu);
+   	  sinThetaNu = TMath::Sin(thetaNu);
 
-  tmpIndex = legIntegrationParams_[1].idx_mNuNu_;
-  double nu2Mass = 0;
-  double nu2P = nuEn;
-  if(tmpIndex != -1){
-    nu2Mass = TMath::Sqrt(x_[tmpIndex]);
-    nu2P = TMath::Sqrt(TMath::Max(0., nuEn*nuEn - x_[tmpIndex]));
+   	  nuPx_local = nu2P*cosPhiNu*sinThetaNu;
+   	  nuPy_local = nu2P*sinPhiNu*sinThetaNu;
+   	  nuPz_local = nu2P*cosThetaNu;
+   	  nuPx = nuPx_local*leg2eX_x_ + nuPy_local*leg2eY_x_ + nuPz_local*leg2eZ_x_;
+   	  nuPy = nuPx_local*leg2eX_y_ + nuPy_local*leg2eY_y_ + nuPz_local*leg2eZ_y_;
+   	  nuPz = nuPx_local*leg2eX_z_ + nuPy_local*leg2eY_z_ + nuPz_local*leg2eZ_z_;
+   	  //std::cout << "nu2: En = " << nuEn << ", Pt = " << TMath::Sqrt(nuPx*nuPx + nuPy*nuPy) << std::endl;
+   	  nu2P4_.SetPxPyPzE(nuPx, nuPy, nuPz, nuEn);
+
+	  double tau2En = vis2P4.E() + nuEn;
+	  double tau2Px = vis2P4.px() + nuPx;
+	  double tau2Py = vis2P4.py() + nuPy;
+	  double tau2Pz = vis2P4.pz() + nuPz;
+	  //std::cout << "tau2: En = " << tau2En << ", Pt = " << TMath::Sqrt(tau2Px*tau2Px + tau2Py*tau2Py) << std::endl;
+	  tau2P4_.SetPxPyPzE(tau2Px, tau2Py, tau2Pz, tau2En);
   }
 
-  tmpIndex = legIntegrationParams_[1].idx_phi_;
-  assert(tmpIndex != -1);
-  phiNu = x_[tmpIndex];
-  cosThetaNu = compCosThetaNuNu(vis2P4.E(), vis2P4.P(), leg2Mass2_, nuEn, nu2P, square(nu2Mass));
-  if ( !(cosThetaNu >= -1. && cosThetaNu <= +1.) ) return 0.;
-   
-  sincos(phiNu, &sinPhiNu, &cosPhiNu);
-  thetaNu = TMath::ACos(cosThetaNu);
-  sinThetaNu = TMath::Sin(thetaNu);
+  else {
+	  double tau2En = vis2P4.E();
+	  double tau2Px = vis2P4.px();
+	  double tau2Py = vis2P4.py();
+	  double tau2Pz = vis2P4.pz();
+	  //std::cout << "tau2: En = " << tau2En << ", Pt = " << TMath::Sqrt(tau2Px*tau2Px + tau2Py*tau2Py) << std::endl;
+	  tau2P4_.SetPxPyPzE(tau2Px, tau2Py, tau2Pz, tau2En);
 
-  nuPx_local = nu2P*cosPhiNu*sinThetaNu;
-  nuPy_local = nu2P*sinPhiNu*sinThetaNu;
-  nuPz_local = nu2P*cosThetaNu;
-  nuPx = nuPx_local*leg2eX_x_ + nuPy_local*leg2eY_x_ + nuPz_local*leg2eZ_x_;
-  nuPy = nuPx_local*leg2eX_y_ + nuPy_local*leg2eY_y_ + nuPz_local*leg2eZ_y_;
-  nuPz = nuPx_local*leg2eX_z_ + nuPy_local*leg2eY_z_ + nuPz_local*leg2eZ_z_;
-  //std::cout << "nu2: En = " << nuEn << ", Pt = " << TMath::Sqrt(nuPx*nuPx + nuPy*nuPy) << std::endl;
-  nu2P4_.SetPxPyPzE(nuPx, nuPy, nuPz, nuEn);
-
-  double tau2En = vis2P4.E() + nuEn;
-  double tau2Px = vis2P4.px() + nuPx;
-  double tau2Py = vis2P4.py() + nuPy;
-  double tau2Pz = vis2P4.pz() + nuPz;
-  //std::cout << "tau2: En = " << tau2En << ", Pt = " << TMath::Sqrt(tau2Px*tau2Px + tau2Py*tau2Py) << std::endl;
-  tau2P4_.SetPxPyPzE(tau2Px, tau2Py, tau2Pz, tau2En);
+  }
 
   if ( verbosity_ >= 2 ) {
     std::cout << "leg1: En = " << vis1P4.E() << ", Px = " << vis1P4.px()
@@ -509,17 +550,17 @@ ClassicSVfitIntegrand::EvalPS(const double* q) const
 #endif
 
   double prob_PS_and_tauDecay = classic_svFit::constFactor;
-  double prob_tauDecay_leg1 = 0.;
+  double prob_tauDecay_leg1 = 1.;
   if ( leg1isLep_ ) {
     prob_tauDecay_leg1 = compPSfactor_tauToLepDecay(x1, vis1P4.E(), vis1P4.P(), leg1Mass_, nu1P4_.E(), nu1P4_.P(), nu1Mass);
-  } else {
+  } else if (!leg1isPrompt_) {
     prob_tauDecay_leg1 = compPSfactor_tauToHadDecay(x1, vis1P4.E(), vis1P4.P(), leg1Mass_, nu1P4_.E(), nu1P4_.P());
   }
   prob_PS_and_tauDecay *= prob_tauDecay_leg1;
-  double prob_tauDecay_leg2 = 0.;
+  double prob_tauDecay_leg2 = 1.;
   if ( leg2isLep_ ) {
     prob_tauDecay_leg2 = compPSfactor_tauToLepDecay(x2, vis2P4.E(), vis2P4.P(), leg2Mass_, nu2P4_.E(), nu2P4_.P(), nu2Mass);
-  } else {
+  } else if (!leg2isPrompt_) {
     prob_tauDecay_leg2 = compPSfactor_tauToHadDecay(x2, vis2P4.E(), vis2P4.P(), leg2Mass_, nu2P4_.E(), nu2P4_.P());
   }
   prob_PS_and_tauDecay *= prob_tauDecay_leg2;

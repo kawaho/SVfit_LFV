@@ -50,7 +50,8 @@ MeasuredTauLepton::MeasuredTauLepton(int type, double pt, double eta, double phi
   preciseVisMass_ = mass_;
   if ( preciseVisMass_ < (0.9*minVisMass) || preciseVisMass_ > (1.1*maxVisMass) ) {
     std::string type_string;
-    if      ( type_ == kTauToElecDecay ) type_string = "tau -> electron decay";
+    if      ( type_ == kPrompt         ) type_string = "prompt lepton (lepton-flavor-violating)";
+    else if ( type_ == kTauToElecDecay ) type_string = "tau -> electron decay";
     else if ( type_ == kTauToMuDecay   ) type_string = "tau -> muon decay";
     else if ( type_ == kTauToHadDecay  ) type_string = "tau -> had decay";
     else {
@@ -130,4 +131,23 @@ void MeasuredTauLepton::initialize()
   cosPhi_sinTheta_ = TMath::Cos(phi_)*TMath::Sin(theta);
   sinPhi_sinTheta_ = TMath::Sin(phi_)*TMath::Sin(theta);
   cosTheta_ = TMath::Cos(theta);
+  isLeptonicTauDecay_ = (type_ == MeasuredTauLepton::kTauToElecDecay || type_ == MeasuredTauLepton::kTauToMuDecay);
+  isHadronicTauDecay_ = (type_ == MeasuredTauLepton::kTauToHadDecay);
+  isPrompt_ = (type_ == MeasuredTauLepton::kPrompt);
 }
+
+bool MeasuredTauLepton::isLeptonicTauDecay() const
+{
+  return isLeptonicTauDecay_;
+}
+
+bool MeasuredTauLepton::isHadronicTauDecay() const
+{
+  return isHadronicTauDecay_;
+}
+
+bool MeasuredTauLepton::isPrompt() const
+{
+  return isPrompt_;
+}
+

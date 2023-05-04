@@ -204,13 +204,22 @@ void ClassicSVfit::setIntegrationParams(bool useMassConstraint)
         setLegIntegrationParams(1, useMassConstraint);
         if ( verbosity_ >= 1 ) printIntegrationRange();
 }
-
+    
 void ClassicSVfit::setLegIntegrationParams(unsigned int iLeg, bool useMassConstraint)
 {
 
         const MeasuredTauLepton& measuredTauLepton = measuredTauLeptons_[iLeg];
 
-        if (!useMassConstraint) legIntegrationParams_[iLeg].idx_X_ = numDimensions_++;
+
+	if ( measuredTauLepton.type() == MeasuredTauLepton::kPrompt ) {
+	  if ( measuredTauLepton.type() == MeasuredTauLepton::kTauToHadDecay) {
+	    if ( useHadTauTF_ ) legIntegrationParams_[iLeg].idx_VisPtShift_ = numDimensions_++;
+	  }
+	} else {
+	  if ( !useMassConstraint ) {
+	    legIntegrationParams_[iLeg].idx_X_ = numDimensions_++;
+	  }
+	} 
 
         legIntegrationParams_[iLeg].idx_phi_ = numDimensions_++;
 
@@ -249,6 +258,10 @@ struct sortMeasuredTauLeptons
 {
         bool operator() (const MeasuredTauLepton& measuredTauLepton1, const MeasuredTauLepton& measuredTauLepton2)
         {
+		if ( measuredTauLepton1.type() == MeasuredTauLepton::kPrompt && measuredTauLepton2.type() != MeasuredTauLepton::kPrompt )
+		    return true;
+  		if ( measuredTauLepton2.type() == MeasuredTauLepton::kPrompt && measuredTauLepton1.type() != MeasuredTauLepton::kPrompt )
+    		    return false;
                 if ( (measuredTauLepton1.type() == MeasuredTauLepton::kTauToElecDecay || measuredTauLepton1.type() == MeasuredTauLepton::kTauToMuDecay) &&
                      measuredTauLepton2.type() == MeasuredTauLepton::kTauToHadDecay  ) return true;
                 if ( (measuredTauLepton2.type() == MeasuredTauLepton::kTauToElecDecay || measuredTauLepton2.type() == MeasuredTauLepton::kTauToMuDecay) &&

@@ -104,6 +104,7 @@ namespace classic_svFit
     /// measured tau leptons
     MeasuredTauLepton measuredTauLepton1_;
     bool leg1isLep_;
+    bool leg1isPrompt_;
     double leg1Mass_;
     double leg1Mass2_;
     double leg1eX_x_;
@@ -117,6 +118,7 @@ namespace classic_svFit
     double leg1eZ_z_;
     MeasuredTauLepton measuredTauLepton2_;
     bool leg2isLep_;
+    bool leg2isPrompt_;
     double leg2Mass_;
     double leg2Mass2_;
     double leg2eX_x_;
